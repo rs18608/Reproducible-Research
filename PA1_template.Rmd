@@ -1,25 +1,167 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_Activity_Monitoring.Rmd"
+author: "Lynn Scott"
+date: "July 11, 2016"
+output: html_document
 ---
 
 
-## Loading and preprocessing the data
+## Load and pre-process data.
 
+```{r echo=TRUE}
+setwd("/Users/rs186089/coursera/repro-research/RepData_PeerAssessment1")
+unzip("activity.zip")
+activity.data <- read.table("activity.csv", header=TRUE, sep=",")
 
+str(activity.data)
+```
 
-## What is mean total number of steps taken per day?
+## What is the mean total number of steps taken per day?
 
+```{r echo=TRUE}
+
+library(dplyr)
+
+total.steps.per.day = aggregate(activity.data$steps, list(date = activity.data$date), sum, na.rm = TRUE)
+colnames(total.steps.per.day)[2] = "total.steps"
+
+head(total.steps.per.day)
+```
+
+Below is the distribution of the total number of steps taken per day (missing values are ignored):
+
+```{r echo=TRUE}
+hist(total.steps.per.day$total.steps, 
+     main = "Distribution of Total Number of Steps per Day", 
+     xlab = "Total Number of Steps per Day", 
+     ylab = "Frequency (Number of Days)", 
+     breaks=20, col = "blue")
+```
+
+### Mean of steps taken per day:
+```{r echo=TRUE}
+mean(total.steps.per.day$total.steps, na.rm=TRUE)
+```
+### Median of steps taken per day:
+```{r echo=TRUE}
+median(total.steps.per.day$total.steps, na.rm=TRUE)
+```
 
 
 ## What is the average daily activity pattern?
 
+Calcuate the average number of steps per 5-minute interval over the 2 month period:
+
+```{r echo=TRUE}
+
+avg.steps.per.interval = aggregate(activity.data$steps, list(interval = activity.data$interval), mean, na.rm = TRUE)
+
+colnames(avg.steps.per.interval)[2] = "avg.steps"
+
+head(avg.steps.per.interval)
+
+```
+The following graph represents the average daily activity pattern. It is a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis):
+
+```{r echo=TRUE}
+plot(strptime(sprintf("%04d", avg.steps.per.interval$interval), format="%H%M"),
+     avg.steps.per.interval$avg.steps, type = "l", 
+     main = "Average Daily Activity", 
+     xlab = "Time of Day (HH:MM)", 
+     ylab = "Average Number of Steps")
 
 
-## Imputing missing values
+```
+
+By deriving the maximum of average steps from avg.setsp.per.interval, the interval the containst the maximum number of steps is show:
+
+```{r echo=TRUE}
+  max.interval = filter(avg.steps.per.interval, avg.steps==max(avg.steps))
+```
+
+So the 5 minute interval that contains the maximum number of steps is: `r max.interval[1]`.
+
+## Inputing missing values:
+
+Total number of missing values:
+
+```{r echo=TRUE}
+  sum(is.na(activity.data))
+```
+
+New data set with missing values is replaced with the mean for each interval of the original data set.
+
+```{r echo=TRUE}
+
+activity.data.revised = inner_join(activity.data, avg.steps.per.interval, by="interval") %>%
+                    mutate(steps=ifelse(is.na(steps), avg.steps, steps)) %>%
+                    select(date, interval, steps)
+
+head(activity.data.revised)
+```
+
+Below is the distribution of the total number of steps taken per day (NAs have been normalized to contain the mean of the interval):
+
+```{r echo=TRUE}
+
+total.steps.per.day = aggregate(activity.data.revised$steps, list(date = activity.data.revised$date), sum, na.rm = TRUE)
+colnames(total.steps.per.day)[2] = "total.steps"
+
+hist(total.steps.per.day$total.steps, 
+     main = "Distribution of Total Number of Steps per Day (revised)", 
+     xlab = "Total Number of Steps per Day", 
+     ylab = "Frequency (Number of Days)", 
+     breaks=20, col = "blue")
+```
+
+With the data normalized to revise missing intervals the mean does not change:
+```{r echo=TRUE}
+mean(total.steps.per.day$total.steps, na.rm=TRUE)
+```
+but the median has changed to equal the mean.
+```{r echo=TRUE}
+median(total.steps.per.day$total.steps, na.rm=TRUE)
+```
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+First make factors for the the days of the week (i.e. weekday/weekend).
+
+```{r echo=TRUE}
+
+weekdays <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+activity.data.revised$day.of.week = as.factor(ifelse(is.element(weekdays(as.Date(activity.data.revised$date)),weekdays), "Weekday", "Weekend"))
+                                   
+head(activity.data.revised)
+```
+
+Calculate the average number of steps per calandar day:
+```{r echo=TRUE}
+activity.pattern = activity.data.revised %>%
+                    group_by(day.of.week, interval) %>%
+                    summarize(avg.steps=mean(steps))
+
+head(activity.pattern)
+```
 
 
+Plot the average daily activity.
+```{r echo=TRUE}
 
-## Are there differences in activity patterns between weekdays and weekends?
+library(ggplot2)
+library(scales)
+
+ggplot(activity.pattern, aes(interval, avg.steps, group=1)) +
+    geom_line() +
+    facet_grid(day.of.week~., scale='free_y') +
+    xlab('Time of Day') +
+    ylab('Average Number of Steps') +
+    ggtitle("Average Daily Activity\nWeekday vs. Weekend")
+
+```
+
+The following conclusions can be drawn from the plot above:
+
+* People are active in the early morning weekeday then the weekeend days
+* Weekday ctivity is quite intense around 8:30AM
+* Weekend activity is more spread out during the day
